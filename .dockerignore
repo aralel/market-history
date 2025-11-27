@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# Environments & local
+venv/
+.env
+*.log
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# App runtime artifacts
+market_data.db
+/data/
+/tmp/
