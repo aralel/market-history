@@ -19,16 +19,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: app/requirements.txt
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        working-directory: app
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Import check
-        working-directory: app
         run: |
           python - <<'PY'
           import importlib
@@ -37,11 +35,9 @@ jobs:
           PY
 
       - name: Compile sources
-        working-directory: app
         run: python -m compileall -q .
 
       - name: Basic route smoke test
-        working-directory: app
         run: |
           python - <<'PY'
           from app import app as flask_app
@@ -52,7 +48,6 @@ jobs:
           PY
 
       - name: Optional lint (ruff if available)
-        working-directory: app
         run: |
           python - <<'PY'
           import importlib.util, sys, subprocess
