@@ -454,6 +454,12 @@ def get_stock_history():
 def stock_history_html():
     return send_from_directory(APP_DIR, 'stock_history.html')
 
+# Ensure database schema exists when imported by a WSGI server (e.g., Gunicorn)
+try:
+    init_db()
+except Exception:
+    pass
+
 def parse_number(val):
     """Parse a number from various formats"""
     if val is None:
