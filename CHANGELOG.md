@@ -34,3 +34,7 @@ All notable changes to this project will be documented in this file.
 
 - Fix: Dockerfile healthcheck parse error
   - Replaced heredoc-based HEALTHCHECK with exec-form `CMD ["python", "-c", "..."]` to avoid Dockerfile parser treating inline code as instructions.
+
+- Fix: Docker Deployment Healthcheck
+  - Updated `Dockerfile` to install `curl` and use it for healthcheck, resolving "missing curl" warning and improving reliability.
+  - Fixed `app.py` root route to correctly serve `index.html` (previously pointed to missing `market_app.html`), resolving 404 errors that caused healthcheck failures.

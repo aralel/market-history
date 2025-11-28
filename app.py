@@ -13,11 +13,11 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @app.route('/')
 def root_index():
-    return send_from_directory(APP_DIR, 'market_app.html')
+    return send_from_directory(APP_DIR, 'index.html')
 
 @app.route('/market_app.html')
 def legacy_market_app_html():
-    return send_from_directory(APP_DIR, 'market_app.html')
+    return send_from_directory(APP_DIR, 'index.html')
 
 def get_db_connection():
     """Create a database connection"""

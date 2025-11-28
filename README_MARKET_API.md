@@ -28,7 +28,7 @@ The server will start on `http://localhost:5000` and automatically create the SQ
 
 ### 3. Open the Frontend
 
-Open `market_app.html` in your web browser. The frontend will connect to the Flask API automatically.
+Open `index.html` in your web browser. The frontend will connect to the Flask API automatically.
 
 ## API Endpoints
 
@@ -231,7 +231,7 @@ The expected JSON format matches the original market.html structure:
 ## Files
 
 - `app.py`: Flask API backend
-- `market_app.html`: Frontend with database integration
+- `index.html`: Frontend with database integration
 - `market.html`: Original standalone version
 - `requirements.txt`: Python dependencies
 - `market_data.db`: SQLite database (created automatically)
