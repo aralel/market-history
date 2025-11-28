@@ -31,3 +31,6 @@ All notable changes to this project will be documented in this file.
 
 - CI: GitHub Actions
   - Added `.github/workflows/python-app.yml` to install dependencies, import-check `app.py`, byte-compile sources, and run a basic Flask route smoke test on every push/PR.
+
+- Fix: Dockerfile healthcheck parse error
+  - Replaced heredoc-based HEALTHCHECK with exec-form `CMD ["python", "-c", "..."]` to avoid Dockerfile parser treating inline code as instructions.

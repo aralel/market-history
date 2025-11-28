@@ -23,16 +23,7 @@ EXPOSE 8080
 
 # Optional healthcheck (skips extra packages)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python - <<'PY' || exit 1
-import urllib.request, sys, os
-port = os.environ.get('PORT', '8080')
-url = f'http://127.0.0.1:{port}/api/imports'
-try:
-    with urllib.request.urlopen(url, timeout=3) as r:
-        sys.exit(0 if r.status == 200 else 1)
-except Exception:
-    sys.exit(1)
-PY
+  CMD ["python", "-c", "import urllib.request, sys, os\nport = os.environ.get('PORT', '8080')\nurl = f'http://127.0.0.1:{port}/api/imports'\ntry:\n    with urllib.request.urlopen(url, timeout=3) as r:\n        sys.exit(0 if r.status == 200 else 1)\nexcept Exception:\n    sys.exit(1)\n"]
 
 # Run with Gunicorn
 CMD ["sh", "-c", "gunicorn -w ${GUNICORN_WORKERS:-2} -b 0.0.0.0:${PORT} app:app"]
