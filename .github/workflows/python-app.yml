@@ -1,0 +1,62 @@
+name: Python App CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: app/requirements.txt
+
+      - name: Install dependencies
+        working-directory: app
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import check
+        working-directory: app
+        run: |
+          python - <<'PY'
+          import importlib
+          m = importlib.import_module('app')
+          print('Imported', m.__name__)
+          PY
+
+      - name: Compile sources
+        working-directory: app
+        run: python -m compileall -q .
+
+      - name: Basic route smoke test
+        working-directory: app
+        run: |
+          python - <<'PY'
+          from app import app as flask_app
+          with flask_app.test_client() as c:
+              r = c.get('/')
+              print('GET / =>', r.status_code)
+              assert r.status_code in (200, 304)
+          PY
+
+      - name: Optional lint (ruff if available)
+        working-directory: app
+        run: |
+          python - <<'PY'
+          import importlib.util, sys, subprocess
+          if importlib.util.find_spec('ruff'):
+              sys.exit(subprocess.call(['ruff', 'check', '.']))
+          print('ruff not installed; skipping lint')
+          PY

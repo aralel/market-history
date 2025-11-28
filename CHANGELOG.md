@@ -28,3 +28,6 @@ All notable changes to this project will be documented in this file.
 
 - Fix: Flask 3 compatibility
   - Removed deprecated `before_first_request` usage; DB initialization now happens in `__main__` during local runs.
+
+- CI: GitHub Actions
+  - Added `.github/workflows/python-app.yml` to install dependencies, import-check `app.py`, byte-compile sources, and run a basic Flask route smoke test on every push/PR.
