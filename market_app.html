@@ -847,7 +847,12 @@
           row.className = 'chart-row';
           const label = document.createElement('div');
           label.className = 'chart-label';
-          label.textContent = s.name;
+          const labelLink = document.createElement('a');
+          labelLink.href = '/stock_history.html?name=' + encodeURIComponent(s.name);
+          labelLink.target = '_blank';
+          labelLink.rel = 'noopener noreferrer';
+          labelLink.textContent = s.name;
+          label.appendChild(labelLink);
           row.appendChild(label);
 
           const chartHolder = document.createElement('div');
@@ -1188,13 +1193,30 @@
         const tbody = document.createElement('tbody');
         const mutedSet = opts && opts.mutedRowIndices ? opts.mutedRowIndices : null;
         const rowNames = opts && opts.rowNames ? opts.rowNames : null;
+        const nameColIndex = headers.indexOf('name');
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           const tr = document.createElement('tr');
           if (mutedSet && mutedSet.has(i)) tr.classList.add('row-muted');
-          for (const cell of row) {
+          for (let j = 0; j < row.length; j++) {
+            const cell = row[j];
             const td = document.createElement('td');
-            if (cell && typeof cell === 'object' && 'text' in cell) {
+            if (j === nameColIndex) {
+              let text = '';
+              if (cell && typeof cell === 'object' && 'text' in cell) {
+                text = String(cell.text || '');
+                if (cell.className) td.classList.add(cell.className);
+                if (cell.title) td.title = cell.title;
+              } else {
+                text = String(cell ?? '');
+              }
+              const a = document.createElement('a');
+              a.href = '/stock_history.html?name=' + encodeURIComponent(text);
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+              a.textContent = text;
+              td.appendChild(a);
+            } else if (cell && typeof cell === 'object' && 'text' in cell) {
               td.textContent = cell.text;
               if (cell.title) td.title = cell.title;
               if (cell.className) td.classList.add(cell.className);

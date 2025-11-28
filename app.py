@@ -11,6 +11,10 @@ CORS(app)
 DATABASE = os.getenv('DATABASE_PATH', 'market_data.db')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
+@app.before_first_request
+def ensure_db_initialized():
+    init_db()
+
 @app.route('/')
 def root_index():
     return send_from_directory(APP_DIR, 'market_app.html')
@@ -63,6 +67,12 @@ def init_db():
     
     cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_market_name ON market_records(name, import_id)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_market_import_id ON market_records(import_id)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_market_import_appeal ON market_records(import_id, appeal DESC)
     ''')
     
     conn.commit()
@@ -387,6 +397,62 @@ def compare_imports():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stock_history', methods=['GET'])
+def get_stock_history():
+    try:
+        name = request.args.get('name')
+        if not name:
+            return jsonify({'error': 'Missing name'}), 400
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                i.file_date AS file_date,
+                m.current AS current,
+                m.target AS target,
+                m.growth AS growth,
+                m.appeal AS appeal,
+                m.buy AS buy,
+                m.hold AS hold,
+                m.sell AS sell,
+                m.relative_change AS relative_change,
+                m.absolute_change AS absolute_change,
+                m.daily_change AS daily_change,
+                m.cap AS cap,
+                m.trend AS trend
+            FROM market_records m
+            JOIN imports i ON i.id = m.import_id
+            WHERE m.name = ?
+            ORDER BY i.file_date ASC
+        ''', (name,))
+        rows = cursor.fetchall()
+        out = []
+        for row in rows:
+            out.append({
+                'name': name,
+                'date': row['file_date'],
+                'current': row['current'],
+                'target': row['target'],
+                'growth': row['growth'],
+                'appeal': row['appeal'],
+                'buy': row['buy'],
+                'hold': row['hold'],
+                'sell': row['sell'],
+                'relative': row['relative_change'],
+                'absolute': row['absolute_change'],
+                'daily_change': row['daily_change'],
+                'cap': row['cap'],
+                'trend': row['trend']
+            })
+        conn.close()
+        return jsonify({'name': name, 'records': out})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stock_history.html')
+def stock_history_html():
+    return send_from_directory(APP_DIR, 'stock_history.html')
 
 def parse_number(val):
     """Parse a number from various formats"""
