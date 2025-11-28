@@ -13,7 +13,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @app.route('/')
 def root_index():
-    return send_from_directory(APP_DIR, 'index.html')
+    return send_from_directory(APP_DIR, 'market_app.html')
 
 @app.route('/market_app.html')
 def legacy_market_app_html():
