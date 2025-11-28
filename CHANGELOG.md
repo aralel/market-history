@@ -16,3 +16,15 @@ All notable changes to this project will be documented in this file.
   - Added `GET /api/stock_history?name=...` to return historical records for a stock ordered by date.
   - Added `stock_history.html` page and `/stock_history.html` route to display the history in a table.
   - Made stock names clickable in tables; clicking opens the stock history page in a new tab.
+  - Added a Chart tab in `stock_history.html` with ECharts line charts and selectable metrics (current, target, growth, appeal, buy/hold/sell, relative, daily).
+  - Chart tab controls now show colored dots and labels matching series colors (acts as a legend).
+  - UI: Long stock names now wrap in tables and compare labels to avoid overflow.
+  - Feature: Stock history table columns are sortable via clickable headers (date, numeric metrics, cap with T/B/M/K parsing, trend as text).
+  - Feature: History tab's import table is now sortable by clicking column headers; clicking View auto-scrolls to the rendered table.
+  - Rename: Main frontend entry is now `index.html`; Flask `/` serves `index.html`. Legacy `/market_app.html` remains for compatibility. Back links updated accordingly.
+
+- Fix: Chart toggles in stock history
+  - Unchecking attributes now removes the corresponding series reliably by clearing the chart and applying options with `notMerge=true`.
+
+- Fix: Flask 3 compatibility
+  - Removed deprecated `before_first_request` usage; DB initialization now happens in `__main__` during local runs.

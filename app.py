@@ -11,12 +11,12 @@ CORS(app)
 DATABASE = os.getenv('DATABASE_PATH', 'market_data.db')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-@app.before_first_request
-def ensure_db_initialized():
-    init_db()
-
 @app.route('/')
 def root_index():
+    return send_from_directory(APP_DIR, 'index.html')
+
+@app.route('/market_app.html')
+def legacy_market_app_html():
     return send_from_directory(APP_DIR, 'market_app.html')
 
 def get_db_connection():

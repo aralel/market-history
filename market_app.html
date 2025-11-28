@@ -134,6 +134,8 @@
     }
     th, td { padding: 10px 12px; font-size: 14px; text-align: left; white-space: nowrap; }
     td:first-child { white-space: normal; word-wrap: break-word; max-width: 200px; }
+    .cell-name { white-space: normal; word-break: break-word; overflow-wrap: anywhere; max-width: 240px; }
+    .chart-label a { display: inline-block; word-break: break-word; overflow-wrap: anywhere; }
     tbody tr:nth-child(even) td { background: #fcfcfd; }
     tbody tr:hover td { background: #f7f8fb; }
     tbody tr { cursor: pointer; }
@@ -455,7 +457,7 @@
     (function () {
       'use strict';
 
-      const API_BASE = '/api';
+      const API_BASE = (location.protocol === 'file:' ? 'http://127.0.0.1:5000/api' : '/api');
       
       const dropzone = document.getElementById('dropzone');
       const fileInput = document.getElementById('fileInput');
@@ -648,6 +650,7 @@
           resultsContainer.appendChild(wrapper);
 
           renderTableInContainer(tableDiv, tableData);
+          try { wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
         } catch (err) {
           resultsContainer.innerHTML = `<div class="message error">Failed to load import: ${err.message}</div>`;
         }
@@ -848,7 +851,8 @@
           const label = document.createElement('div');
           label.className = 'chart-label';
           const labelLink = document.createElement('a');
-          labelLink.href = '/stock_history.html?name=' + encodeURIComponent(s.name);
+          const histPath = (location.protocol === 'file:' ? 'stock_history.html' : '/stock_history.html');
+          labelLink.href = histPath + '?name=' + encodeURIComponent(s.name);
           labelLink.target = '_blank';
           labelLink.rel = 'noopener noreferrer';
           labelLink.textContent = s.name;
@@ -1182,9 +1186,13 @@
         const table = document.createElement('table');
         const thead = document.createElement('thead');
         const trh = document.createElement('tr');
-        for (const h of headers) {
+        const ths = [];
+        for (let hi = 0; hi < headers.length; hi++) {
           const th = document.createElement('th');
-          th.textContent = h;
+          th.textContent = headers[hi];
+          th.style.cursor = 'pointer';
+          th.dataset.colIndex = String(hi);
+          ths.push(th);
           trh.appendChild(th);
         }
         thead.appendChild(trh);
@@ -1192,41 +1200,76 @@
 
         const tbody = document.createElement('tbody');
         const mutedSet = opts && opts.mutedRowIndices ? opts.mutedRowIndices : null;
-        const rowNames = opts && opts.rowNames ? opts.rowNames : null;
         const nameColIndex = headers.indexOf('name');
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const tr = document.createElement('tr');
-          if (mutedSet && mutedSet.has(i)) tr.classList.add('row-muted');
-          for (let j = 0; j < row.length; j++) {
-            const cell = row[j];
-            const td = document.createElement('td');
-            if (j === nameColIndex) {
-              let text = '';
-              if (cell && typeof cell === 'object' && 'text' in cell) {
-                text = String(cell.text || '');
-                if (cell.className) td.classList.add(cell.className);
+        const indexed = rows.map((r, i) => ({ r, muted: !!(mutedSet && mutedSet.has(i)) }));
+        let sortState = { col: 0, dir: 1 };
+        const getCellText = (row, j) => {
+          const cell = row.r[j];
+          if (cell && typeof cell === 'object' && 'text' in cell) return String(cell.text ?? '');
+          return String(cell ?? '');
+        };
+        const valueOf = (s) => {
+          const n = toNumber(String(s));
+          if (Number.isFinite(n)) return n;
+          return String(s).toLowerCase();
+        };
+        function renderBody() {
+          const sorted = indexed.slice().sort((a, b) => {
+            const av = valueOf(getCellText(a, sortState.col));
+            const bv = valueOf(getCellText(b, sortState.col));
+            if (av === bv) return 0;
+            return (av > bv ? 1 : -1) * sortState.dir;
+          });
+          tbody.innerHTML = '';
+          for (let ii = 0; ii < sorted.length; ii++) {
+            const row = sorted[ii].r;
+            const tr = document.createElement('tr');
+            if (sorted[ii].muted) tr.classList.add('row-muted');
+            for (let j = 0; j < row.length; j++) {
+              const cell = row[j];
+              const td = document.createElement('td');
+              if (j === nameColIndex) {
+                let text = '';
+                if (cell && typeof cell === 'object' && 'text' in cell) {
+                  text = String(cell.text || '');
+                  if (cell.className) td.classList.add(cell.className);
+                  if (cell.title) td.title = cell.title;
+                } else {
+                  text = String(cell ?? '');
+                }
+                const a = document.createElement('a');
+                const histPath = (location.protocol === 'file:' ? 'stock_history.html' : '/stock_history.html');
+                a.href = histPath + '?name=' + encodeURIComponent(text);
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.textContent = text;
+                td.classList.add('cell-name');
+                td.appendChild(a);
+              } else if (cell && typeof cell === 'object' && 'text' in cell) {
+                td.textContent = cell.text;
                 if (cell.title) td.title = cell.title;
+                if (cell.className) td.classList.add(cell.className);
               } else {
-                text = String(cell ?? '');
+                td.textContent = cell;
               }
-              const a = document.createElement('a');
-              a.href = '/stock_history.html?name=' + encodeURIComponent(text);
-              a.target = '_blank';
-              a.rel = 'noopener noreferrer';
-              a.textContent = text;
-              td.appendChild(a);
-            } else if (cell && typeof cell === 'object' && 'text' in cell) {
-              td.textContent = cell.text;
-              if (cell.title) td.title = cell.title;
-              if (cell.className) td.classList.add(cell.className);
-            } else {
-              td.textContent = cell;
+              tr.appendChild(td);
             }
-            tr.appendChild(td);
+            tbody.appendChild(tr);
           }
-          tbody.appendChild(tr);
+          for (let hi = 0; hi < ths.length; hi++) {
+            const base = headers[hi];
+            const arrow = sortState.col === hi ? (sortState.dir === 1 ? ' ▲' : ' ▼') : '';
+            ths[hi].textContent = base + arrow;
+          }
         }
+        ths.forEach(th => {
+          th.addEventListener('click', () => {
+            const col = Number(th.dataset.colIndex || '0');
+            if (sortState.col === col) sortState.dir = -sortState.dir; else { sortState.col = col; sortState.dir = 1; }
+            renderBody();
+          });
+        });
+        renderBody();
         table.appendChild(tbody);
         return table;
       }

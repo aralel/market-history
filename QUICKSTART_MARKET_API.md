@@ -22,9 +22,9 @@ You should see:
 The SQLite database (`market_data.db`) will be created automatically on first run.
 
 ### 3. Open the Frontend
-Open `market_app.html` in your web browser:
+Open `index.html` in your web browser:
 ```bash
-open market_app.html
+open index.html
 ```
 
 ## Usage
@@ -71,7 +71,7 @@ Your JSON file should match the format from `market.html`:
 ## Files Created
 
 - **app.py** - Flask API backend
-- **market_app.html** - Frontend with tabs for upload/history/compare
+- **index.html** - Frontend with tabs for upload/history/compare
 - **requirements.txt** - Python dependencies
 - **README_MARKET_API.md** - Full API documentation
 - **market_data.db** - SQLite database (auto-created)

@@ -39,6 +39,8 @@
       font-size: 1.2rem;
       margin: 0;
       font-weight: 700;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     a.btn-link { color: var(--accent); text-decoration: none; }
     a.btn-link:hover { text-decoration: underline; }
@@ -63,33 +65,84 @@
     .message.info { background: #eef; color: var(--accent); border: 1px solid #ccf; }
     .cell-negative { color: var(--error) !important; }
     .cell-positive { color: var(--success) !important; }
+    .tabs { display: flex; gap: 8px; margin: 12px 0; border-bottom: 2px solid var(--border); }
+    .tab { padding: 8px 14px; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-weight: 500; color: var(--muted); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .chart-container { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .chart-echarts { width: 100%; height: 360px; min-width: 400px; }
+    .chart-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .chart-controls label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1 id="title">Stock History</h1>
-      <a href="/" class="btn-link">← Back to app</a>
+      <a id="backLink" href="/" class="btn-link">← Back to app</a>
     </header>
     <div id="messages"></div>
-    <section class="table-wrapper">
-      <div id="meta" class="table-meta"></div>
-      <div id="tableContainer" class="table-container"></div>
+    <div class="tabs">
+      <button class="tab active" data-tab="table">Table</button>
+      <button class="tab" data-tab="chart">Chart</button>
+    </div>
+    <section id="tableSection" class="tab-content active">
+      <div class="table-wrapper">
+        <div id="meta" class="table-meta"></div>
+        <div id="tableContainer" class="table-container"></div>
+      </div>
+    </section>
+    <section id="chartSection" class="tab-content">
+      <div id="chartControls" class="chart-controls"></div>
+      <div class="chart-container">
+        <div id="chart" class="chart-echarts"></div>
+      </div>
     </section>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script>
     (function(){
       'use strict';
-      const API_BASE = '/api';
+      const API_BASE = (location.protocol === 'file:' ? 'http://127.0.0.1:5000/api' : '/api');
       const params = new URLSearchParams(location.search);
       const stockName = params.get('name') || '';
 
       const messages = document.getElementById('messages');
       const meta = document.getElementById('meta');
       const tableContainer = document.getElementById('tableContainer');
+      const chartRoot = document.getElementById('chart');
+      const chartControls = document.getElementById('chartControls');
+      const tableSection = document.getElementById('tableSection');
+      const chartSection = document.getElementById('chartSection');
+      const metricColors = {
+        current: '#3b82f6',
+        target: '#7c3aed',
+        growth: '#10b981',
+        appeal: '#f59e0b',
+        buy: '#22c55e',
+        hold: '#9ca3af',
+        sell: '#ef4444',
+        relative: '#06b6d4',
+        daily_change: '#4f46e5'
+      };
 
       document.getElementById('title').textContent = stockName ? `Stock History — ${stockName}` : 'Stock History';
+      const backLink = document.getElementById('backLink');
+      if (backLink) backLink.href = (location.protocol === 'file:' ? 'index.html' : '/');
+      document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+          btn.classList.add('active');
+          const name = btn.dataset.tab;
+          (name === 'table' ? tableSection : chartSection).classList.add('active');
+          if (name === 'chart' && chartInstance) {
+            try { chartInstance.resize(); } catch {}
+          }
+        });
+      });
 
       function showMessage(msg, type = 'info') {
         const div = document.createElement('div');
@@ -148,6 +201,194 @@
         return table;
       }
 
+      let tableSort = { key: 'date', dir: 'asc' };
+
+      function capToNum(val) {
+        if (!val) return NaN;
+        if (typeof val !== 'string') return NaN;
+        const m = val.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*([TtBbMmKk])?$/);
+        if (!m) return NaN;
+        const num = parseFloat(m[1]);
+        const suf = (m[2] || '').toUpperCase();
+        const mult = suf === 'T' ? 1e12 : suf === 'B' ? 1e9 : suf === 'M' ? 1e6 : suf === 'K' ? 1e3 : 1;
+        return num * mult;
+      }
+
+      function sortRecords(records, sort) {
+        const { key, dir } = sort || {};
+        const mult = dir === 'desc' ? -1 : 1;
+        const toKey = (r) => {
+          if (key === 'date') return new Date(r.date).getTime() || 0;
+          if (key === 'cap') {
+            const n = capToNum(r.cap);
+            return Number.isFinite(n) ? n : (String(r.cap || '')).toLowerCase();
+          }
+          if (['trend'].includes(key)) return (String(r[key] || '')).toLowerCase();
+          const n = Number(r[key]);
+          return Number.isFinite(n) ? n : -Infinity;
+        };
+        return [...records].sort((a,b) => {
+          const av = toKey(a); const bv = toKey(b);
+          if (av === bv) return 0;
+          return (av > bv ? 1 : -1) * mult;
+        });
+      }
+
+      function renderHistoryTable() {
+        const cols = [
+          { key: 'date', label: 'Date', fmt: (v)=>formatDate(v) },
+          { key: 'current', label: 'Current', fmt: (v)=>formatMoney(Number(v)) },
+          { key: 'target', label: 'Target', fmt: (v)=>formatMoney(Number(v)) },
+          { key: 'growth', label: 'Growth %', fmt: (v)=>formatPercent(Number(v)) },
+          { key: 'appeal', label: 'Appeal', fmt: (v)=>formatNumber(Number(v),2) },
+          { key: 'buy', label: 'Buy %', fmt: (v)=>formatPercent(Number(v),0) },
+          { key: 'hold', label: 'Hold %', fmt: (v)=>formatPercent(Number(v),0) },
+          { key: 'sell', label: 'Sell %', fmt: (v)=>formatPercent(Number(v),0) },
+          { key: 'relative', label: 'Relative %', fmt: (v)=>formatPercent(Number(v)) },
+          { key: 'absolute', label: 'Absolute', fmt: (v)=>formatMoney(Number(v)) },
+          { key: 'daily_change', label: 'Daily %', fmt: (v)=>formatPercent(Number(v)) },
+          { key: 'cap', label: 'Cap', fmt: (v)=>String(v||'') },
+          { key: 'trend', label: 'Trend', fmt: (v)=>String(v||'') },
+        ];
+        const sorted = sortRecords(historyRecords, tableSort);
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const trh = document.createElement('tr');
+        cols.forEach(c => {
+          const th = document.createElement('th');
+          th.style.cursor = 'pointer';
+          const isActive = tableSort.key === c.key;
+          const arrow = isActive ? (tableSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+          th.textContent = c.label + arrow;
+          th.addEventListener('click', () => {
+            if (tableSort.key === c.key) {
+              tableSort.dir = (tableSort.dir === 'asc' ? 'desc' : 'asc');
+            } else {
+              tableSort.key = c.key; tableSort.dir = 'asc';
+            }
+            renderHistoryTable();
+          });
+          trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        sorted.forEach(r => {
+          const tr = document.createElement('tr');
+          cols.forEach(c => {
+            const td = document.createElement('td');
+            td.textContent = c.fmt(r[c.key]);
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        tableContainer.innerHTML = '';
+        tableContainer.appendChild(table);
+      }
+
+      function buildChartControls(selected) {
+        const defs = [
+          { key: 'current', label: 'Current' },
+          { key: 'target', label: 'Target' },
+          { key: 'growth', label: 'Growth %' },
+          { key: 'appeal', label: 'Appeal' },
+          { key: 'buy', label: 'Buy %' },
+          { key: 'hold', label: 'Hold %' },
+          { key: 'sell', label: 'Sell %' },
+          { key: 'relative', label: 'Relative %' },
+          { key: 'daily_change', label: 'Daily %' }
+        ];
+        chartControls.innerHTML = '';
+        defs.forEach(d => {
+          const label = document.createElement('label');
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.value = d.key;
+          input.checked = selected.includes(d.key);
+          input.addEventListener('change', () => renderChart());
+          const color = metricColors[d.key] || '#4f46e5';
+          const dot = document.createElement('span');
+          dot.style.display = 'inline-block';
+          dot.style.width = '12px';
+          dot.style.height = '12px';
+          dot.style.borderRadius = '3px';
+          dot.style.backgroundColor = color;
+          const span = document.createElement('span');
+          span.textContent = d.label;
+          span.style.color = color;
+          label.appendChild(input);
+          label.appendChild(dot);
+          label.appendChild(span);
+          chartControls.appendChild(label);
+        });
+      }
+
+      function getSelectedMetricKeys() {
+        const keys = [];
+        chartControls.querySelectorAll('input[type="checkbox"]').forEach(i => { if (i.checked) keys.push(i.value); });
+        return keys;
+      }
+
+      function metricType(key) {
+        if (key === 'current' || key === 'target' || key === 'absolute') return 'value';
+        if (key === 'appeal') return 'score';
+        return 'percent';
+      }
+
+      function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+      let chartInstance = null;
+      let historyRecords = [];
+      let chartDates = [];
+
+      function prepareChartData(records) {
+        const sorted = [...records].sort((a,b)=> new Date(a.date) - new Date(b.date));
+        chartDates = sorted.map(r => r.date);
+      }
+
+      function renderChart() {
+        if (!chartRoot) return;
+        const selected = getSelectedMetricKeys();
+        if (!selected.length) {
+          if (chartInstance) { try { chartInstance.dispose(); } catch {} chartInstance = null; }
+          return;
+        }
+        if (!chartInstance) chartInstance = echarts.init(chartRoot);
+        const axesTypes = [];
+        const ensureAxis = (t) => { let i = axesTypes.indexOf(t); if (i === -1) { axesTypes.push(t); i = axesTypes.length - 1; } return i; };
+
+        const series = selected.map(k => {
+          const yAxisIndex = ensureAxis(metricType(k));
+          const data = historyRecords.map(r => {
+            const v = (k in r) ? toNum(r[k]) : null;
+            return (v === null ? null : v);
+          });
+          const color = metricColors[k] || '#4f46e5';
+          return { name: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), type: 'line', smooth: true, showSymbol: false, data, connectNulls: true, yAxisIndex, lineStyle: { width: 2, color }, itemStyle: { color } };
+        });
+
+        const yAxes = axesTypes.map(t => {
+          if (t === 'percent') return { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#e5e7eb' } }, axisLabel: { color: '#6b7280', formatter: (v) => v + '%' } };
+          return { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#e5e7eb' } }, axisLabel: { color: '#6b7280' } };
+        });
+
+        const option = {
+          animation: true,
+          grid: { left: 48, right: 24, top: 20, bottom: 28 },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross', snap: true, label: { show: true, backgroundColor: '#111827' } }
+          },
+          xAxis: { type: 'category', data: chartDates.map(d => { const x = new Date(d); return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString(); }), axisTick: { show: false }, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#6b7280' } },
+          yAxis: yAxes,
+          series
+        };
+        try { chartInstance.clear(); } catch {}
+        chartInstance.setOption(option, true);
+        try { chartInstance.resize(); } catch {}
+      }
+
       async function loadHistory() {
         if (!stockName) {
           showMessage('Missing stock name in URL. Example: /stock_history.html?name=AAPL', 'error');
@@ -162,30 +403,26 @@
             return;
           }
 
-          const headers = [
-            'Date','Current','Target','Growth %','Appeal','Buy %','Hold %','Sell %','Relative %','Absolute','Daily %','Cap','Trend'
-          ];
-          const rows = (data.records || []).map(r => [
-            formatDate(r.date),
-            formatMoney(Number(r.current)),
-            formatMoney(Number(r.target)),
-            formatPercent(Number(r.growth)),
-            formatNumber(Number(r.appeal), 2),
-            formatPercent(Number(r.buy), 0),
-            formatPercent(Number(r.hold), 0),
-            formatPercent(Number(r.sell), 0),
-            formatPercent(Number(r.relative)),
-            formatMoney(Number(r.absolute)),
-            formatPercent(Number(r.daily_change)),
-            r.cap || '',
-            r.trend || ''
-          ]);
-
           messages.innerHTML = '';
-          tableContainer.innerHTML = '';
-          const table = buildTable(headers, rows);
-          tableContainer.appendChild(table);
-          meta.textContent = `${rows.length.toLocaleString()} record${rows.length === 1 ? '' : 's'} for ${stockName}`;
+          historyRecords = (data.records || []).map(r => ({
+            date: r.date,
+            current: Number(r.current),
+            target: Number(r.target),
+            growth: Number(r.growth),
+            appeal: Number(r.appeal),
+            buy: Number(r.buy),
+            hold: Number(r.hold),
+            sell: Number(r.sell),
+            relative: Number(r.relative),
+            absolute: Number(r.absolute),
+            daily_change: Number(r.daily_change)
+          }));
+          renderHistoryTable();
+          meta.textContent = `${historyRecords.length.toLocaleString()} record${historyRecords.length === 1 ? '' : 's'} for ${stockName}`;
+          prepareChartData(historyRecords);
+          buildChartControls(['current','target','growth','appeal']);
+          renderChart();
+          window.addEventListener('resize', () => { if (chartInstance) { try { chartInstance.resize(); } catch {} } });
         } catch (err) {
           showMessage(`Failed to load: ${err.message}`, 'error');
         }
